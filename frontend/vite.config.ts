@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   base: '/buzzer/',
   define: {
-    'import.meta.env.VITE_WS_URL': JSON.stringify('wss://PLACEHOLDER.execute-api.ap-southeast-1.amazonaws.com/prod'),
+    'import.meta.env.VITE_WS_URL': JSON.stringify('wss://v4wnnp3dk1.execute-api.ap-southeast-1.amazonaws.com/prod'),
   },
   build: {
     rollupOptions: {

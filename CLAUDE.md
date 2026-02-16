@@ -43,7 +43,7 @@ buzzer/
 
 ## Deployment
 - **Frontend URL**: `https://d1gr6jyuq5jzqs.cloudfront.net/buzzer/index.html`
-- **WebSocket URL**: TBD (after first deploy)
+- **WebSocket URL**: `wss://v4wnnp3dk1.execute-api.ap-southeast-1.amazonaws.com/prod`
 - **Backend Stack**: `buzzer` (SAM/CloudFormation, ap-southeast-1)
 - **CloudFront ID**: E3Q96KPBE6V4X8
 - **S3 Bucket**: flip-seven-games-com-wip (frontend served from `/buzzer/`)
