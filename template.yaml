@@ -1,0 +1,373 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Buzzer — first-to-buzz app (WebSocket API)
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref BuzzerTable
+        WEBSOCKET_ENDPOINT: !Sub "https://${BuzzerWebSocket}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+Resources:
+  # ---------- DynamoDB ----------
+  BuzzerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-table"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ---------- WebSocket API ----------
+  BuzzerWebSocket:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-websocket"
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      StageName: prod
+      AutoDeploy: true
+
+  # ---------- IAM Role ----------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BuzzerLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt BuzzerTable.Arn
+                  - !Sub "${BuzzerTable.Arn}/index/*"
+              - Effect: Allow
+                Action:
+                  - execute-api:ManageConnections
+                Resource:
+                  - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/prod/POST/@connections/*"
+
+  # ---------- Lambda Functions ----------
+  OnConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: onConnect.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - onConnect.ts
+
+  OnDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: onDisconnect.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - onDisconnect.ts
+
+  CreateRoomFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: createRoom.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - createRoom.ts
+
+  JoinRoomFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: joinRoom.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - joinRoom.ts
+
+  BuzzFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: buzz.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - buzz.ts
+
+  ResetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: reset.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - reset.ts
+
+  RejoinRoomFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: rejoinRoom.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - rejoinRoom.ts
+
+  # ---------- Routes, Integrations & Permissions ----------
+  # $connect
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ConnectIntegration}"
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnConnectFunction.Arn}/invocations"
+
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/$connect"
+
+  # $disconnect
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${DisconnectIntegration}"
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnDisconnectFunction.Arn}/invocations"
+
+  DisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnDisconnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/$disconnect"
+
+  # createRoom
+  CreateRoomRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: createRoom
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${CreateRoomIntegration}"
+
+  CreateRoomIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateRoomFunction.Arn}/invocations"
+
+  CreateRoomPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CreateRoomFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/createRoom"
+
+  # joinRoom
+  JoinRoomRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: joinRoom
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${JoinRoomIntegration}"
+
+  JoinRoomIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${JoinRoomFunction.Arn}/invocations"
+
+  JoinRoomPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref JoinRoomFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/joinRoom"
+
+  # buzz
+  BuzzRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: buzz
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${BuzzIntegration}"
+
+  BuzzIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BuzzFunction.Arn}/invocations"
+
+  BuzzPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BuzzFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/buzz"
+
+  # reset
+  ResetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: reset
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${ResetIntegration}"
+
+  ResetIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ResetFunction.Arn}/invocations"
+
+  ResetPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ResetFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/reset"
+
+  # rejoinRoom
+  RejoinRoomRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: rejoinRoom
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${RejoinRoomIntegration}"
+
+  RejoinRoomIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RejoinRoomFunction.Arn}/invocations"
+
+  RejoinRoomPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref RejoinRoomFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/rejoinRoom"
+
+Outputs:
+  WebSocketURL:
+    Description: WebSocket API URL
+    Value: !Sub "wss://${BuzzerWebSocket}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref BuzzerTable

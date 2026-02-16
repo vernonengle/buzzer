@@ -1,0 +1,90 @@
+name: Deploy Buzzer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Run backend tests
+        run: cd backend && npm test
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+  deploy:
+    name: Deploy
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::828788451819:role/github-actions-buzzer-role
+          aws-region: ap-southeast-1
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Install esbuild globally
+        run: npm install -g esbuild
+
+      - name: SAM build and deploy
+        run: |
+          sam build
+          sam deploy --no-fail-on-empty-changeset
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Sync frontend to S3
+        run: |
+          aws s3 sync frontend/dist/ s3://flip-seven-games-com-wip/buzzer/ \
+            --delete \
+            --cache-control "max-age=300"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id E3Q96KPBE6V4X8 \
+            --paths "/buzzer/*"

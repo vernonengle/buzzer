@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.build.parameters]
+cached = true
+
+[default.deploy.parameters]
+stack_name = "buzzer"
+region = "ap-southeast-1"
+s3_bucket = "flip-seven-sam-deploy"
+s3_prefix = "buzzer-sam-artifacts"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
