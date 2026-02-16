@@ -38,7 +38,7 @@ describe("joinRoom", () => {
       status: "waiting", players: [
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
       ],
-      buzzState: { locked: false, buzzes: [] }, ttl: 999999,
+      buzzState: { open: false, buzzes: [] }, ttl: 999999,
     });
 
     const result = await handler(makeEvent("conn-2", { roomCode: "abcd", name: "Bob" }), {} as any, () => {});

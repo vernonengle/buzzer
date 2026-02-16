@@ -33,7 +33,7 @@ describe("rejoinRoom", () => {
         { connectionId: "conn-old", playerId: "p1", name: "Alice" },
         { connectionId: "conn-2", playerId: "p2", name: "Bob" },
       ],
-      buzzState: { locked: true, buzzes: [{ playerId: "p2", name: "Bob", timestamp: 1000 }] },
+      buzzState: { open: true, buzzes: [{ playerId: "p2", name: "Bob", reactionTime: 300 }] },
       ttl: 123,
     });
 
@@ -52,7 +52,7 @@ describe("rejoinRoom", () => {
       action: "roomState",
       roomCode: "ABCD",
       playerId: "p1",
-      buzzState: expect.objectContaining({ locked: true }),
+      buzzState: expect.objectContaining({ open: true }),
     }));
   });
 
@@ -71,7 +71,7 @@ describe("rejoinRoom", () => {
       status: "active", players: [
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
       ],
-      buzzState: { locked: false, buzzes: [] }, ttl: 123,
+      buzzState: { open: false, buzzes: [] }, ttl: 123,
     });
 
     const result = await handler(

@@ -12,7 +12,8 @@ const initialState: AppState = {
   playerName: null,
   hostPlayerId: null,
   players: [],
-  buzzState: { locked: false, buzzes: [] },
+  buzzState: { open: false, buzzes: [] },
+  buzzerOpenedAt: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -25,7 +26,8 @@ function reducer(state: AppState, action: AppAction): AppState {
         playerId: action.playerId,
         hostPlayerId: action.playerId,
         players: action.players,
-        buzzState: { locked: false, buzzes: [] },
+        buzzState: { open: false, buzzes: [] },
+        buzzerOpenedAt: null,
       };
     case "ROOM_JOINED":
       return {
@@ -36,15 +38,22 @@ function reducer(state: AppState, action: AppAction): AppState {
         hostPlayerId: action.hostPlayerId,
         players: action.players,
         buzzState: action.buzzState,
+        buzzerOpenedAt: action.buzzState.open ? Date.now() : null,
       };
     case "PLAYER_JOINED":
       return { ...state, players: action.players };
     case "PLAYER_LEFT":
       return { ...state, players: action.players, hostPlayerId: action.hostPlayerId };
+    case "BUZZER_OPEN":
+      return {
+        ...state,
+        buzzState: { open: true, buzzes: [] },
+        buzzerOpenedAt: Date.now(),
+      };
     case "BUZZED":
-      return { ...state, buzzState: { locked: action.locked, buzzes: action.buzzes } };
+      return { ...state, buzzState: { ...state.buzzState, buzzes: action.buzzes } };
     case "BUZZER_RESET":
-      return { ...state, buzzState: { locked: false, buzzes: [] } };
+      return { ...state, buzzState: { open: false, buzzes: [] }, buzzerOpenedAt: null };
     case "ROOM_STATE":
       return {
         ...state,
@@ -54,6 +63,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         hostPlayerId: action.hostPlayerId,
         players: action.players,
         buzzState: action.buzzState,
+        buzzerOpenedAt: action.buzzState.open ? Date.now() : null,
       };
     case "SET_NAME":
       return { ...state, playerName: action.name };
@@ -79,8 +89,11 @@ export default function App() {
       case "playerLeft":
         dispatch({ type: "PLAYER_LEFT", playerId: msg.playerId, players: msg.players, hostPlayerId: msg.hostPlayerId });
         break;
+      case "buzzerOpen":
+        dispatch({ type: "BUZZER_OPEN" });
+        break;
       case "buzzed":
-        dispatch({ type: "BUZZED", buzzes: msg.buzzes, locked: msg.locked });
+        dispatch({ type: "BUZZED", buzzes: msg.buzzes });
         break;
       case "buzzerReset":
         dispatch({ type: "BUZZER_RESET" });
@@ -130,15 +143,18 @@ export default function App() {
       <BuzzerScreen
         buzzState={state.buzzState}
         playerId={state.playerId!}
-        onBuzz={() => sendMessage("buzz")}
+        buzzerOpenedAt={state.buzzerOpenedAt}
+        onBuzz={(reactionTime) => sendMessage("buzz", { reactionTime })}
       />
 
       {isHost && (
         <HostControls
           players={state.players}
           playerId={state.playerId!}
+          buzzerOpen={state.buzzState.open}
+          hasBuzzes={state.buzzState.buzzes.length > 0}
+          onOpenBuzzer={() => sendMessage("openBuzzer")}
           onReset={() => sendMessage("reset")}
-          buzzLocked={state.buzzState.locked}
         />
       )}
     </div>

@@ -31,7 +31,7 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
       hostPlayerId: playerId,
       status: "waiting",
       players: [player],
-      buzzState: { locked: false, buzzes: [] },
+      buzzState: { open: false, buzzes: [] },
     };
 
     await putItem({

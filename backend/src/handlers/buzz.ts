@@ -1,5 +1,5 @@
 import { APIGatewayProxyWebSocketHandlerV2 } from "aws-lambda";
-import { getItem, putItem, connectionKey, roomKey } from "../shared/dynamo.js";
+import { getItem, updateItem, connectionKey, roomKey } from "../shared/dynamo.js";
 import { sendToPlayer, broadcast } from "../shared/broadcast.js";
 import { RoomMeta } from "../shared/types.js";
 
@@ -7,6 +7,14 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
   const connectionId = event.requestContext.connectionId;
 
   try {
+    const body = JSON.parse(event.body ?? "{}");
+    const reactionTime: number = body.reactionTime;
+
+    if (typeof reactionTime !== "number" || reactionTime < 0) {
+      await sendToPlayer(connectionId, { action: "error", message: "Invalid reactionTime" });
+      return { statusCode: 400, body: "" };
+    }
+
     const conn = await getItem<{ roomCode: string; playerId: string }>(
       connectionKey(connectionId)
     );
@@ -23,8 +31,12 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
       return { statusCode: 404, body: "" };
     }
 
-    const alreadyBuzzed = room.buzzState.buzzes.some((b) => b.playerId === conn.playerId);
-    if (alreadyBuzzed) {
+    if (!room.buzzState.open) {
+      await sendToPlayer(connectionId, { action: "error", message: "Buzzer is not open" });
+      return { statusCode: 400, body: "" };
+    }
+
+    if (room.buzzState.buzzes.some((b) => b.playerId === conn.playerId)) {
       await sendToPlayer(connectionId, { action: "error", message: "Already buzzed" });
       return { statusCode: 400, body: "" };
     }
@@ -38,22 +50,26 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
     const buzz = {
       playerId: conn.playerId,
       name: player.name,
-      timestamp: Date.now(),
+      reactionTime,
     };
 
-    room.buzzState.buzzes.push(buzz);
-    room.buzzState.locked = true;
+    // Atomic append to avoid lost writes from concurrent buzzes
+    await updateItem(
+      roomKey(conn.roomCode),
+      "SET buzzState.buzzes = list_append(buzzState.buzzes, :newBuzz)",
+      { ":newBuzz": [buzz] },
+    );
 
-    await putItem({
-      ...roomKey(conn.roomCode),
-      ...room,
-    });
+    // Read back to get full buzz list for broadcasting
+    const updated = await getItem<RoomMeta>(roomKey(conn.roomCode));
+    const sortedBuzzes = [...(updated?.buzzState.buzzes ?? [])].sort(
+      (a, b) => a.reactionTime - b.reactionTime
+    );
 
     const allConnectionIds = room.players.map((p) => p.connectionId);
     await broadcast(allConnectionIds, {
       action: "buzzed",
-      buzzes: room.buzzState.buzzes,
-      locked: room.buzzState.locked,
+      buzzes: sortedBuzzes,
     });
 
     return { statusCode: 200, body: "" };

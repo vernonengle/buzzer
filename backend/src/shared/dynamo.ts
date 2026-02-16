@@ -4,10 +4,12 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
   DeleteCommand,
   GetCommandInput,
   PutCommandInput,
   QueryCommandInput,
+  UpdateCommandInput,
   DeleteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 
@@ -62,6 +64,22 @@ export async function queryItems<T>(
   };
   const result = await docClient.send(new QueryCommand(params));
   return (result.Items ?? []) as T[];
+}
+
+export async function updateItem(
+  key: Record<string, string>,
+  updateExpression: string,
+  expressionValues: Record<string, unknown>,
+  expressionNames?: Record<string, string>
+): Promise<void> {
+  const params: UpdateCommandInput = {
+    TableName: tableName(),
+    Key: key,
+    UpdateExpression: updateExpression,
+    ExpressionAttributeValues: expressionValues,
+    ...(expressionNames && { ExpressionAttributeNames: expressionNames }),
+  };
+  await docClient.send(new UpdateCommand(params));
 }
 
 export async function deleteItem(key: Record<string, string>): Promise<void> {

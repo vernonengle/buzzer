@@ -9,11 +9,11 @@ export interface Player {
 export interface Buzz {
   playerId: string;
   name: string;
-  timestamp: number;
+  reactionTime: number;
 }
 
 export interface BuzzState {
-  locked: boolean;
+  open: boolean;
   buzzes: Buzz[];
 }
 

@@ -24,11 +24,11 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
     }
 
     if (room.hostPlayerId !== conn.playerId) {
-      await sendToPlayer(connectionId, { action: "error", message: "Only the host can reset" });
+      await sendToPlayer(connectionId, { action: "error", message: "Only the host can open the buzzer" });
       return { statusCode: 403, body: "" };
     }
 
-    room.buzzState = { open: false, buzzes: [] };
+    room.buzzState = { open: true, buzzes: [] };
 
     await putItem({
       ...roomKey(conn.roomCode),
@@ -37,13 +37,13 @@ export const handler: APIGatewayProxyWebSocketHandlerV2 = async (event) => {
 
     const allConnectionIds = room.players.map((p) => p.connectionId);
     await broadcast(allConnectionIds, {
-      action: "buzzerReset",
+      action: "buzzerOpen",
     });
 
     return { statusCode: 200, body: "" };
   } catch (err) {
-    console.error("reset error:", err);
-    await sendToPlayer(connectionId, { action: "error", message: "Failed to reset" });
+    console.error("openBuzzer error:", err);
+    await sendToPlayer(connectionId, { action: "error", message: "Failed to open buzzer" });
     return { statusCode: 500, body: "" };
   }
 };

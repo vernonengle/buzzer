@@ -15,13 +15,15 @@ interface PanelState {
   connected: boolean;
   players: PlayerInfo[];
   buzzState: BuzzState;
+  buzzerOpenedAt: number | null;
 }
 
 type PanelAction =
   | { type: "CONNECTED" }
   | { type: "DISCONNECTED" }
   | { type: "PLAYERS_UPDATED"; players: PlayerInfo[] }
-  | { type: "BUZZED"; buzzes: Buzz[]; locked: boolean }
+  | { type: "BUZZER_OPEN" }
+  | { type: "BUZZED"; buzzes: Buzz[] }
   | { type: "BUZZER_RESET" }
   | { type: "ROOM_STATE"; players: PlayerInfo[]; buzzState: BuzzState };
 
@@ -33,12 +35,19 @@ function reducer(state: PanelState, action: PanelAction): PanelState {
       return { ...state, connected: false };
     case "PLAYERS_UPDATED":
       return { ...state, players: action.players };
+    case "BUZZER_OPEN":
+      return { ...state, buzzState: { open: true, buzzes: [] }, buzzerOpenedAt: Date.now() };
     case "BUZZED":
-      return { ...state, buzzState: { locked: action.locked, buzzes: action.buzzes } };
+      return { ...state, buzzState: { ...state.buzzState, buzzes: action.buzzes } };
     case "BUZZER_RESET":
-      return { ...state, buzzState: { locked: false, buzzes: [] } };
+      return { ...state, buzzState: { open: false, buzzes: [] }, buzzerOpenedAt: null };
     case "ROOM_STATE":
-      return { ...state, players: action.players, buzzState: action.buzzState };
+      return {
+        ...state,
+        players: action.players,
+        buzzState: action.buzzState,
+        buzzerOpenedAt: action.buzzState.open ? Date.now() : null,
+      };
     default:
       return state;
   }
@@ -48,7 +57,8 @@ export function BuzzerPanel({ wsUrl, roomCode, playerId, playerName, isHost }: B
   const [state, dispatch] = useReducer(reducer, {
     connected: false,
     players: [],
-    buzzState: { locked: false, buzzes: [] },
+    buzzState: { open: false, buzzes: [] },
+    buzzerOpenedAt: null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -83,8 +93,11 @@ export function BuzzerPanel({ wsUrl, roomCode, playerId, playerName, isHost }: B
           case "playerLeft":
             dispatch({ type: "PLAYERS_UPDATED", players: msg.players });
             break;
+          case "buzzerOpen":
+            dispatch({ type: "BUZZER_OPEN" });
+            break;
           case "buzzed":
-            dispatch({ type: "BUZZED", buzzes: msg.buzzes, locked: msg.locked });
+            dispatch({ type: "BUZZED", buzzes: msg.buzzes });
             break;
           case "buzzerReset":
             dispatch({ type: "BUZZER_RESET" });
@@ -118,14 +131,17 @@ export function BuzzerPanel({ wsUrl, roomCode, playerId, playerName, isHost }: B
       <BuzzerScreen
         buzzState={state.buzzState}
         playerId={playerId}
-        onBuzz={() => sendMessage("buzz")}
+        buzzerOpenedAt={state.buzzerOpenedAt}
+        onBuzz={(reactionTime) => sendMessage("buzz", { reactionTime })}
       />
       {isHost && (
         <HostControls
           players={state.players}
           playerId={playerId}
+          buzzerOpen={state.buzzState.open}
+          hasBuzzes={state.buzzState.buzzes.length > 0}
+          onOpenBuzzer={() => sendMessage("openBuzzer")}
           onReset={() => sendMessage("reset")}
-          buzzLocked={state.buzzState.locked}
         />
       )}
     </div>

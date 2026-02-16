@@ -6,11 +6,11 @@ export interface PlayerInfo {
 export interface Buzz {
   playerId: string;
   name: string;
-  timestamp: number;
+  reactionTime: number;
 }
 
 export interface BuzzState {
-  locked: boolean;
+  open: boolean;
   buzzes: Buzz[];
 }
 
@@ -20,7 +20,8 @@ export type ServerMessage =
   | { action: "roomJoined"; roomCode: string; playerId: string; players: PlayerInfo[]; hostPlayerId: string; buzzState: BuzzState }
   | { action: "playerJoined"; player: PlayerInfo; players: PlayerInfo[] }
   | { action: "playerLeft"; playerId: string; players: PlayerInfo[]; hostPlayerId: string }
-  | { action: "buzzed"; buzzes: Buzz[]; locked: boolean }
+  | { action: "buzzerOpen" }
+  | { action: "buzzed"; buzzes: Buzz[] }
   | { action: "buzzerReset" }
   | { action: "roomState"; roomCode: string; playerId: string; players: PlayerInfo[]; hostPlayerId: string; buzzState: BuzzState }
   | { action: "error"; message: string };
@@ -35,6 +36,7 @@ export interface AppState {
   hostPlayerId: string | null;
   players: PlayerInfo[];
   buzzState: BuzzState;
+  buzzerOpenedAt: number | null;
 }
 
 export type AppAction =
@@ -42,7 +44,8 @@ export type AppAction =
   | { type: "ROOM_JOINED"; roomCode: string; playerId: string; players: PlayerInfo[]; hostPlayerId: string; buzzState: BuzzState }
   | { type: "PLAYER_JOINED"; player: PlayerInfo; players: PlayerInfo[] }
   | { type: "PLAYER_LEFT"; playerId: string; players: PlayerInfo[]; hostPlayerId: string }
-  | { type: "BUZZED"; buzzes: Buzz[]; locked: boolean }
+  | { type: "BUZZER_OPEN" }
+  | { type: "BUZZED"; buzzes: Buzz[] }
   | { type: "BUZZER_RESET" }
   | { type: "ROOM_STATE"; roomCode: string; playerId: string; players: PlayerInfo[]; hostPlayerId: string; buzzState: BuzzState }
   | { type: "SET_NAME"; name: string };

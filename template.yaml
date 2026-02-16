@@ -166,6 +166,20 @@ Resources:
         EntryPoints:
           - buzz.ts
 
+  OpenBuzzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: openBuzzer.handler
+      CodeUri: backend/src/handlers/
+      Role: !GetAtt LambdaExecutionRole.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        EntryPoints:
+          - openBuzzer.ts
+
   ResetFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -314,6 +328,30 @@ Resources:
       FunctionName: !Ref BuzzFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/buzz"
+
+  # openBuzzer
+  OpenBuzzerRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      RouteKey: openBuzzer
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${OpenBuzzerIntegration}"
+
+  OpenBuzzerIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref BuzzerWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OpenBuzzerFunction.Arn}/invocations"
+
+  OpenBuzzerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OpenBuzzerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BuzzerWebSocket}/*/openBuzzer"
 
   # reset
   ResetRoute:

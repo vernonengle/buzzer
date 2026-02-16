@@ -1,4 +1,4 @@
-import { handler } from "../reset";
+import { handler } from "../openBuzzer";
 
 const mockGetItem = jest.fn();
 const mockPutItem = jest.fn();
@@ -22,8 +22,8 @@ const makeEvent = (connectionId: string) =>
 
 beforeEach(() => jest.clearAllMocks());
 
-describe("reset", () => {
-  it("closes buzzer, clears buzzes, and broadcasts", async () => {
+describe("openBuzzer", () => {
+  it("opens buzzer and broadcasts to all", async () => {
     mockGetItem.mockResolvedValueOnce({ roomCode: "ABCD", playerId: "p1" });
     mockGetItem.mockResolvedValueOnce({
       PK: "ROOM#ABCD", SK: "META", roomCode: "ABCD", hostPlayerId: "p1",
@@ -31,22 +31,35 @@ describe("reset", () => {
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
         { connectionId: "conn-2", playerId: "p2", name: "Bob" },
       ],
-      buzzState: {
-        open: true,
-        buzzes: [{ playerId: "p2", name: "Bob", reactionTime: 300 }],
-      },
-      ttl: 123,
+      buzzState: { open: false, buzzes: [] }, ttl: 123,
     });
 
     const result = await handler(makeEvent("conn-1"), {} as any, () => {});
 
     expect(result).toEqual({ statusCode: 200, body: "" });
     const savedRoom = mockPutItem.mock.calls[0][0];
-    expect(savedRoom.buzzState).toEqual({ open: false, buzzes: [] });
+    expect(savedRoom.buzzState).toEqual({ open: true, buzzes: [] });
     expect(mockBroadcast).toHaveBeenCalledWith(
       ["conn-1", "conn-2"],
-      { action: "buzzerReset" }
+      { action: "buzzerOpen" }
     );
+  });
+
+  it("clears previous buzzes when opening", async () => {
+    mockGetItem.mockResolvedValueOnce({ roomCode: "ABCD", playerId: "p1" });
+    mockGetItem.mockResolvedValueOnce({
+      PK: "ROOM#ABCD", SK: "META", roomCode: "ABCD", hostPlayerId: "p1",
+      status: "active", players: [
+        { connectionId: "conn-1", playerId: "p1", name: "Alice" },
+      ],
+      buzzState: { open: false, buzzes: [{ playerId: "p2", name: "Bob", reactionTime: 500 }] },
+      ttl: 123,
+    });
+
+    await handler(makeEvent("conn-1"), {} as any, () => {});
+
+    const savedRoom = mockPutItem.mock.calls[0][0];
+    expect(savedRoom.buzzState.buzzes).toEqual([]);
   });
 
   it("rejects non-host", async () => {
@@ -57,7 +70,7 @@ describe("reset", () => {
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
         { connectionId: "conn-2", playerId: "p2", name: "Bob" },
       ],
-      buzzState: { open: true, buzzes: [] }, ttl: 123,
+      buzzState: { open: false, buzzes: [] }, ttl: 123,
     });
 
     const result = await handler(makeEvent("conn-2"), {} as any, () => {});

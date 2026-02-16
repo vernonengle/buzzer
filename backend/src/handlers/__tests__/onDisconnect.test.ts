@@ -40,7 +40,7 @@ describe("onDisconnect", () => {
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
         { connectionId: "conn-2", playerId: "p2", name: "Bob" },
       ],
-      buzzState: { locked: false, buzzes: [] }, ttl: 123,
+      buzzState: { open: false, buzzes: [] }, ttl: 123,
     });
 
     await handler(makeEvent("conn-1"), {} as any, () => {});
@@ -65,7 +65,7 @@ describe("onDisconnect", () => {
       status: "active", players: [
         { connectionId: "conn-1", playerId: "p1", name: "Alice" },
       ],
-      buzzState: { locked: false, buzzes: [] }, ttl: 123,
+      buzzState: { open: false, buzzes: [] }, ttl: 123,
     });
 
     await handler(makeEvent("conn-1"), {} as any, () => {});

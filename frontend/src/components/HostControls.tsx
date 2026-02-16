@@ -3,20 +3,29 @@ import type { PlayerInfo } from "../types";
 interface HostControlsProps {
   players: PlayerInfo[];
   playerId: string;
+  buzzerOpen: boolean;
+  hasBuzzes: boolean;
+  onOpenBuzzer: () => void;
   onReset: () => void;
-  buzzLocked: boolean;
 }
 
-export function HostControls({ players, playerId, onReset, buzzLocked }: HostControlsProps) {
+export function HostControls({ players, playerId, buzzerOpen, onOpenBuzzer, onReset }: HostControlsProps) {
   return (
     <div className="host-controls">
-      <button
-        className="btn btn-reset"
-        onClick={onReset}
-        disabled={!buzzLocked}
-      >
-        Reset Buzzer
-      </button>
+      <div className="host-buttons">
+        {!buzzerOpen ? (
+          <button className="btn btn-primary" onClick={onOpenBuzzer}>
+            Open Buzzer
+          </button>
+        ) : (
+          <button
+            className="btn btn-reset"
+            onClick={onReset}
+          >
+            Reset
+          </button>
+        )}
+      </div>
       <div className="player-list">
         <h3>Players ({players.length})</h3>
         <ul>
